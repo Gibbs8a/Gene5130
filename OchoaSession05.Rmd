@@ -1,0 +1,95 @@
+---
+title: "Bioinformatics in R: Statistical Learning very brief intro"
+author: "J. Cesar Ignacio Espinoza - Cesar   "
+date: "Week 07: April 29th and May 1st 2024"
+output: 
+  html_document: 
+    highlight: espresso
+    theme: cerulean
+---
+
+## Statistical Learning is Machine Learning
+
+After the lecture in class we will be running some simple linear models.
+
+```{r}
+#### First install the car package, this has a bunch of classic datasets used when learning ML.
+#install.packages("car")
+library(car)
+library(ggplot2)
+library(readr)
+```
+
+Fox, J. and Weisberg, S. (2019) An R Companion to Applied Regression, Third Edition, Sage.
+
+```{r}
+#### Look at the very elitist prestige package
+help("Prestige")
+```
+
+### First Model 
+
+```{r}
+ggplot(Prestige, aes(x= education, y = prestige)) + geom_point()
+```
+
+# prestige = b + m * education.
+
+```{r}
+reg1<-lm(prestige ~ education, data = Prestige)
+summary(reg1)
+```
+HINT: You can get the weights of the model (coefficients) by doing this:
+```{r}
+b= coef(reg1)[1]
+m= coef(reg1)[2]
+ggplot(Prestige, aes(x= education, y = prestige)) + geom_point()+ geom_abline(intercept = b, slope =m, color = "blue")
+```
+
+intercept <- coef(reg1)[1]
+slope <- coef(reg1)[2]
+You can add them to your ggplot with another geometry.
+
+```{r}
+### Look at the example below, we are adding multiple predictors
+reg2<-lm(prestige~education+log(income)+women, data=Prestige)
+summary(reg2)
+```
+
+```{r}
+### We can add categorical data.
+reg3<-lm(prestige~education+log(income)+type,data=Prestige)
+summary(reg3)
+```
+
+```{r}
+#reorder categorical data to have a "basal" category 
+Prestige$type <- with(Prestige, factor(type, levels = c("bc","wc","prof")))
+```
+
+# Now let's try with Genetic data, upload the dataset from canvas.
+
+
+```{r setup}
+    ### Edit this line so your notebook renders properly
+    knitr::opts_knit$set(root.dir = normalizePath("~/Bioinformatics")) 
+```
+
+```{r}
+data <- read_csv("Cholesterol.csv")
+```
+
+Simple excercise, which snps are significantly associated with Cholesterol level in blood?
+
+```{r}
+### Plot the data, 
+reg1<- lm(CHOL ~ rs7527051, data = data)
+summary(reg1)
+#ggplot(chol_data, aes(x=rs ,y = CHOL)) + geom_point()
+b <- coef(reg1)[1] #intercept
+m <- coef(reg1)[2] #slope
+
+ggplot(data, aes(x= rs6669795, y = CHOL)) + geom_point()+ geom_abline(slope=m, intercept=b, color = "pink")
+```
+
+

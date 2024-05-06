@@ -1,0 +1,251 @@
+---
+title: "Bioinformatics in R. Lab 1: dplyr and ggplot"
+author: "J. Cesar Ignacio Espinoza - Cesar   "
+date: "Week 01: March 18 and 20, 2024"
+output: 
+  html_document: 
+    highlight: espresso
+    theme: cerulean
+---
+
+## Introduction to dplyr [Largest Heading Text]
+### This is so much fun! [2nd Largest]
+#### Yay more data [Third Largest]
+
+**dplyr** is a powerful package in R for data manipulation. It provides a set of functions that are particularly useful for data wrangling tasks.
+
+In this tutorial, we'll cover some of the basic functions in dplyr and how to use them for common data manipulation tasks. Since this is a bioinformatics class the dataset will be RNA-seq FPKM table.
+
+**Test yourself!!!** Before continuing self test and make sure you can identify the differences between, *FPKM, TPM, RPKM*.
+
+### Loading the libraries and data. 
+
+We will be using the data from : 	
+*Zhang Y, Tong GH, Wei XX, Chen HY et al. Identification of Five Cytotoxicity-Related Genes Involved in the Progression of Triple-Negative Breast Cancer. Front Genet 2021;12:723477.*
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE, results="hide"}
+# We first need to import the important libnrary for today's class, dplyr
+library(dplyr)
+library(readr)
+data <- read_csv('BreastCancerData-Class01.csv')
+```
+
+## Basic dplyr functions
+
+#### Piping
+
+If you took 5120 I hope you remember we covered piping **'|'**, so the output of one function would be passed as the input for another function. here in dplyr piping uses a different operator **'%>%'**
+
+In the code block below pipe the data frame into the base r function to get the names of the columns
+
+```{r}
+data %>%
+  colnames()
+# colnames is a function that will print out the names of the columns.
+```
+
+Create more code boxes (formally known as chunks) to inspect the dataset, try the following commands, head(), tail(),  glimpse(), str(), summary(). Write in a sentence or two what they are appear to be doing. You can also look at the documentation.
+
+```{r}
+data %>%
+  dim()
+### This function retrieves the dimensions of the object
+```
+```{r}
+data %>%
+  summary()
+### summaries of the results of various model fitting functions,depends on the class of the first argument
+```
+```{r}
+data %>%
+  head()
+### Returns the first parts of a vector, matrix, table, data frame or function.
+```
+```{r}
+data %>%
+  tail()
+### Returns the last parts of a vector, matrix, table, data frame or function. 
+```
+```{r}
+data %>%
+  glimpse()
+### a transposed version of print(): columns run down the page, and data runs across. This tries to show you as much data as possible. (And it always shows the underlying data, even when applied to a remote data source.)
+```
+```{r}
+data %>% 
+  str()
+### Compactly display the internal structure of an R object, a diagnostic function and an alternative to summary. Ideally, only one line for each ‘basic’ structure is displayed. It is especially well suited to compactly display the (abbreviated) contents of (possibly nested) lists. The idea is to give reasonable output for any R object.
+```
+### Selecting columns. 
+
+The **select()** function is used to select columns from a dataframe. You can specify the columns you want to keep using column names. In the code chunk below select gene, Samples and FPKM, save the subsetted dataframe as subset
+
+```{r}
+subset <- data %>%
+  select(Samples, gene)
+subset
+### Modify this code block by using the function select
+```
+
+**Test yourself!!** What do you think happens when you use a negative sign '-' in front of the column name, Try i.
+#### could do  select(-gene, -FPKM) to view subset
+
+### Filtering rows.
+
+The **filter()** function is used to filter rows based on conditions. You can filter rows from a dataset using logical operators, like =, > or <. If you are comparing strings you need to pass the argument as surronded by quotation marks. For example : **filter(col_1 == 'string')**
+```{r}
+### Modify this code chunk to generate two dataframes based on the metastasis state of the Sample
+
+metastasis <- data %>%
+  filter(metastasis.ch1 == "yes")
+
+no_metastasis <- data %>%
+  filter(metastasis.ch1 == "no")
+```
+
+We spent a lot of time in lecture explaing  what RNAseq and FPKM is lets use these data. Subset the dataframe to include only genes with more 200 FPKM as value and are from not cancerous tissue. Get the dimensions of this new dataframe to a new variable called size_not_cancer_abundant and view it. NOTE: not cancer is stored under *characteristics_ch1* and the value associated to not cancer is 	*tissue: normal breast tissue*
+
+```{r}
+subset <- data %>%
+  filter(FPKM >200)
+subset
+
+size_not_cancer_abundant <- data %>%
+  filter(characteristics_ch1 == "tissue: normal breast tissue") ### Modify this code block
+size_not_cancer_abundant 
+
+
+#####ALTERNATIVELY: non_cancerous_200 <- data %>% / filter(gene == 'BRCA1' | gene == 'BRCA2') / brca_exp will give both of the information, this is for an "OR"
+```
+
+Select the expression of the following genes BRCA1, BRCA2. and view it
+
+```{r}
+brca_exp <- data %>%
+  filter(gene == 'BRCA1' | gene == 'BRCA2')
+brca_exp
+```
+
+### Summarizing Data
+
+The **summarize()** function is used to summarize data, typically by calculating summary statistics. Common operators are mean(), max(), median, sum(), sd(), IQ(). **Try a few!**
+
+```{r}
+data %>%
+  summarize(average_exp = mean(FPKM), max_exp = max(FPKM))
+### can pipe multiple things after one another
+```
+
+You can pass summarize after another function, remember to use the pipe operator, in the code below calculate the mean FPKM for BRCA1. 
+
+```{r}
+### pipe your commands here
+data %>%
+  filter(gene == "BRCA1") %>%
+  summarize(average_FPKM = mean(FPKM))
+```
+
+### Grouping data
+
+Another fan favorite from 5120. The **group_by()** function is used to group data by one or more variables. Naturally it is particularly helpful if we use it in combination with other functions. See 
+
+```{r}
+data %>%
+  filter( gene == 'BRCA1') %>%
+  group_by(metastasis.ch1) %>%
+  summarize(avg = mean(FPKM))
+```
+In the code block below, select BRCA1 and BRCA1, calculate the average expression per gene, per tissue per metastasis state. 
+```{r}
+data %>%
+  filter( gene == 'BRCA1' | gene == 'BRCA2') %>%
+  group_by(gene, tissue.ch1, metastasis.ch1) %>%
+  summarize(avg = mean(FPKM))
+`````````
+### Renaming and changing values in a dataframe
+
+To rename columns in a dataframe using dplyr, you can use the **rename()** function. In the code block below, modify rename the columns: metastasis, tissue and characteristics to something more intuitive. Name the new df as renamed and view it.
+
+```{r}
+### If i run, will the tables above need the new title of the column
+Day1Data <- data %>%
+    rename(Tissue = tissue.ch1)
+ Day1Data
+
+```
+
+## Introduction to ggplot 
+
+**Test yourself** Before going forward try to see if you remember what gg stands for and what are the three basic components of a plot
+
+In this dataset we will continue exploring the same dataset as thre TNBC as above. First we load the libraries.
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE, results="hide"}
+# We first need to import the libraries 
+library(tidyverse)
+library(ggplot2)
+
+```
+
+Before diving into plotting lets remember what components of the plot
+
+##### **ggplot(data, aes(x = variable1, y =variable2 )) + geom() + ... + ... +**
+
+#### Bar Plot
+
+```{r}
+  subset <- data %>%
+    filter(gene == 'BRCA1')
+  ggplot(subset, aes(x= subset$Samples, y = subset$FPKM, fill = subset$metastasis.ch1)) + geom_col() 
+
+```
+In the example above note how we are using base R to link the specific column using the dolar sign, we can use %>% operator one more time to pass a dataframe as the source of data for our ggplot figures. 
+
+```{R}
+data_plot <- data %>%
+  filter(gene == 'BRCA1') 
+```
+
+We can pass the data frame as the data for our ggplot object
+
+
+```{r}
+#ggplot(data_plot, aes(x=Samples, y = FPKM)) + geom_col() 
+### aes(fill = tissue.ch1) 
+```
+#### Density plots
+
+In the example below pass x= as FPKM, a the aestethics of a ggplot object, base the fill on the tissue type.
+
+```{r}
+
+#ggplot(data_plot, aes(x=FPKM, fill = tissue.ch1)) + geom_density(aes(alpha = 0.5)) 
+```
+
+#### Box Plots
+
+```{r}
+#data %>%
+#  filter(gene == 'BRCA2') %>%
+#  ggplot(., aes(x=metastasis.ch1, y = FPKM)) + geom_boxplot()
+```
+
+#### Scatter Plots
+
+```{r}
+two_genes <- data %>%
+  filter(gene == 'BRCA1' | gene == 'BRCA2') %>%
+  spread(key = gene, value = FPKM)
+
+#ggplot(two_genes, aes(x=BRCA1, y=BRCA2)) +geom_point() + geom_smooth()
+
+```
+
+#### HeatMap
+
+```{r}
+#gene_set <- data %>%
+#  filter(gene == 'BRCA1' | gene == 'BRCA2' | gene == 'ALK' | gene == 'MYCN' | gene == 'TP53')
+
+#ggplot(gene_set, aes(x=Samples, y=gene, fill = FPKM)) + geom_tile() 
+

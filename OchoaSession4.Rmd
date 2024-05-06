@@ -1,0 +1,233 @@
+---
+title: "Bioinformatics in R WGCNA"
+author: "J. Cesar Ignacio Espinoza - Cesar   "
+date: "Week 05: April 15th and 17th 2024"
+output: 
+  html_document: 
+    highlight: espresso
+    theme: cerulean
+---
+
+### This class will incorporate a bit of ML.
+
+We will be performing a WGNCA, before proceeding test yourself and make sure you understand what weighted. Gene_network and correlation mean?
+weighted gene network:weighted means each gene's contribution to the network is weighted based on connectivity with other genes. 
+correlation means the expression level of two genes, quantify the similarity or coexpression between genes across samples. 
+
+
+## The dataset.  
+ we will be working with the dataset "	Systems biological assessment of immunity to severe and mild COVID-19 infections" 
+ 
+RNAseq analysis of PBMCs in a group of 17 COVID-19 subjects and 17 healthy controls
+
+
+```{r setup}
+    ### Edit this line so your notebook renders properly
+    knitr::opts_knit$set(root.dir = normalizePath("~/Bioinformatics")) 
+```
+We will be using the package called WGCNA, if you do not have it install, please run this cell, once it is installed comment it!
+```{r}
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install("WGCNA")
+```
+
+We now load the libraries
+```{r message=FALSE, warning=FALSE, paged.print=FALSE, results="hide"}
+# We first need to import the important library for today's class, dplyr
+library(WGCNA)
+library(dplyr)
+library(readr)
+library(DESeq2)
+library(ggplot2)
+```
+
+Load the data (Counts table and metadata from canvas site)
+
+```{r}
+### Run this chunk to import the counts table and metadata into your evironment.
+counts <- read.csv('GSE152418RawCounts.csv', header = TRUE, row.names = 1)
+metadata <- read.csv('GSE152418Metadata.csv', header = TRUE, row.names = 1)
+
+```
+
+### QC:
+Here we wanna explore to see if the dataset that we have is good for analysis
+We are going to use a function called goodSamplesGenes(). Use the cell below to displat the help page of this function, figure out if you can run it
+
+```{r}
+gsG <- goodSamplesGenes(t(counts))
+gsG
+```
+
+Subset your data so only the genes that passed the filter are kept
+
+```{r}
+###unsure on this one 
+#goodSamplesGenes(counts[]) 
+#tol = NULL
+
+SubSet = counts[gsG$goodGenes,]
+SubSet 
+
+  
+  
+```
+
+Another way to detect outliers is to perform hierarchical clustering of all the samples. If you do that you should be able to see if some data points are too far from the rest of the samples.
+
+```{r}
+temptree <- hclust(dist(t(SubSet)), method = 'complete')
+plot(temptree)
+##temptree <- hclust(dist(t(counts)), method = 'complete')
+#plot(temptree)
+```
+
+Outliers are literally that samples taht are far from each other, we can also look at that by applying dimensionality reduction, one of the most common techniques is PCA. run the cell below to go to the help page for PCA
+
+```{r}
+#?prcomp
+pcomp = prcomp(t(SubSet))
+pcomp
+```
+
+
+```{r}
+ggplot(data = pcomp$x, aes(x=PC1, y=PC2)) + geom_point() + geom_text(label = rownames(pcomp$x))
+
+
+```
+
+# Filter the data to remove bad samples
+**HINT** Use DPlyr
+
+```{r}
+#goodSamplesGenes() SECOND DAY STARTED HERE
+really_good_counts <- SubSet %>%
+  select(-GSM4614993) %>%
+  select(-GSM4614995) %>%
+  select(-GSM4615000)
+```
+
+#Normalization. 
+
+The 'easiest' way will be to run DESEq2 and use the normalized counts object from DESeq2, Look at your past notes and run it below. You have all you need but you might need to play with the metadata file.
+HINT : df[!(row.names(df) %in% row_names_df_to_remove),] ### 
+
+```{r}
+###  RENAME THE COLUMNS OF METADATA, removed dots, and renamed the function so it will for sure be the dplyr one 
+phenotype <- metadata[!rownames(metadata) %in% c('GSM4614993', 'GSM4614995', 'GSM4615000'),]
+temp_rename <- rename
+rename <- dplyr::rename
+phenotype
+```
+
+
+```{r}
+new_pheno <- phenotype %>%
+  rename(geo.accession = geo_accession) %>%
+  rename(days.post.symptom.onset.ch1 = days_post_symptom_onset.ch1) %>%
+  rename(geographical.location.ch1 = geographical.location.ch1)
+
+new_pheno
+```
+library(DESeq2)
+dds <- DESeqDataSetFromMatrix(countData = really_good_counts, 
+                              colData = new_pheno,
+                              design = ~ 1)
+```{r}
+library(DESeq2)
+dds <- DESeqDataSetFromMatrix(countData = really_good_counts, 
+                              colData = new_pheno,
+                              design = ~1)
+```
+
+```{r}
+
+###Now remove the genes with counts < 15 in more than 75% of samples (31*0.75 ~ 23)
+###This number is coming from the WGCNA recommendations
+
+
+dds75 <- dds[rowSums(counts(dds)) >= 23]
+``` 
+
+```{r}
+
+dds_norm <- vst(dds75)
+norm_gene_exp <- t(assay(dds_norm))
+```
+#We can finally start with our WGNCA data analysis
+
+First we pick up a soft threshold modify the power vector below, this is our expression network that we just generated, trying different towers (power to the 1-5) and itll be signed.  
+
+```{r}
+
+sft <- pickSoftThreshold(norm_gene_exp, 
+                  powerVector = c(1:5), 
+                  networkType = "signed", 
+                  verbose = 2)
+```
+
+You can acess the results with sft$fitIndices. We are going to pick a power that gives us the higherst R2 and the lowest mean K. 
+
+**HINT plot the data!** First plot Power vs r2
+```{r}
+
+ggplot(sft$fitIndices, aes( x=Power, y=SFT.R.sq)) + geom_point()
+```
+
+Then Plot Power vs mean.k
+```{r}
+ggplot(sft$fitIndices, aes( x=Power, y=mean.k.)) + geom_point()
+```
+After you pick up a threshold we are ready to run our data analysis
+
+```{r}
+##similarity matrix and soft threshold part 
+
+temp_cor <-  cor
+cor <- WGCNA::cor
+norm_gene_exp[] <- sapply(norm_gene_exp, as.numeric)
+
+bwm <- blockwiseModules(norm_gene_exp, 
+                 maxBlockSize = 40000,
+                 TOMType = "signed",
+#                 power = 15, 
+                 mergeCutHeight = 0.2, 
+                 numericLabels = FALSE, 
+                 randomSeed = 1234, 
+                 verbose = 2)
+```
+
+#explore the bwm object, 
+how many modules are there? 
+What us the largest module?
+What is the smallest?
+
+```{r}
+## RUN THIS AS IS, IT WILL PLOT THE COLORS AND DENDROGRAM, distance is arbitrary!
+
+mergedColors = labels2colors(bwm$colors)
+plotDendroAndColors(
+  bwm$dendrograms[[1]],
+  mergedColors[bwm$blockGenes[[1]]],
+  "Module colors",
+  dendroLabels = FALSE,
+  hang = 0.03,
+  addGuide = TRUE,
+  guideHang = 0.05 )
+```
+# Now we can correlate our findings with phenotypic states of patients
+
+```{r}
+traits <- new_pheno %>%
+  mutate(disease_state_bin = ifelse(grepl('COVID', disease_state),1,0))
+
+```
+
+```{r}
+?table
+table(bwm$colors)
+```
+
+

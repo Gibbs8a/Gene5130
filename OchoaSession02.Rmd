@@ -1,0 +1,185 @@
+---
+title: "Bioinformatics in R. Lab 2: DSeq2"
+author: "J. Cesar Ignacio Espinoza - Cesar   "
+date: "Week 02: March 25 and 27, 2024"
+output: 
+  html_document: 
+    highlight: espresso
+    theme: cerulean
+---
+
+```{r setup}
+    ### Edit this line so your notebook renders properly
+    knitr::opts_knit$set(root.dir = normalizePath("~/Bioinformatics")) 
+```
+
+## Differential Gene Expression From Counts Table to DeSeq2
+Begin by downloading the data from (Same link as in today's canvas page), download to your working directory.
+
+#Install the required librries and load the data.
+
+Look at the code block below, it will install DESEQ2
+```{r}
+#if (!require("BiocManager", quietly = TRUE))
+    #install.packages("BiocManager")
+
+#BiocManager::install("DESeq2")
+```
+
+We now load the libraries
+```{r message=FALSE, warning=FALSE, paged.print=FALSE, results="hide"}
+# We first need to import the important library for today's class, dplyr
+library(dplyr)
+library(readr)
+library(DESeq2)
+library(ggplot2)
+
+```
+You can import data into DESeq2 from multiple sources, specifically:
+
+- From transcript abundance files and tximport
+- From a count matrix
+- From htseq-count files
+- From a SummarizedExperiment object
+
+We will be uploading from a counts table:
+```{r}
+### Run this chunk to import the counts table and metadata into your evironment.
+counts <- read.csv('airway_scaledcounts.csv', row.names = 1, header = TRUE)
+metadata <- read.csv('airway_metadata.csv', row.names = 1, header = TRUE)
+
+View(metadata)
+View(counts)
+```
+
+**Side Quest** From Monday Excercise, open a text exitor or even excel! Anc create a metadata file from the small dataset that you ran monday (solution posted on canvas, feel free to run it if you need to do that again!)
+
+**Main Story** Explore your data, both the counts table and the metadata.
+
+```{r}
+### Create a new data object called it sample_info, use the same information as metadata but remove the GEO_ID Column, and change the name from dex to dexamethasone in the header, show your code here
+
+sample_info <- metadata %>%
+  select(-geo_id) %>%
+  dplyr::rename(dexamethasone = dex)
+sample_info
+
+```
+
+You have all you need to run DESeq2, a counts table and a metadata. 
+
+**SideQuest** Look into the console and type DESeqDataSet and see what options you get, create a code chunk here and write the different functions as comments with a couple of words describing the kind of input they take!
+
+
+```{r}
+dds <- DESeqDataSetFromMatrix(countData = counts, 
+                              colData = sample_info,
+                              design = ~ dexamethasone)
+```
+
+And after that you have your dds object!!
+
+Take a look at it!
+
+```{r}
+
+View(dds)
+# You can recover the original counts matrix with the counts function!
+#counts(dds)
+```
+
+### It is a good idea to remove cells with low counts, why?
+HINT: Think about it from the statistics point of view
+
+Thinking about outliers, could be error, but also need significance for our values
+
+#### Students that took R already, use base R to subset the dds object based on the sum across a row, 
+say I just want to keep genes with > than 10 reads across al samples!?!
+
+#### Students that haven;t take R think about a pseudocode way to do it!
+```{r}
+#count(dds) ##error in i 
+subset_dds <- dds[rowSums(counts(dds)) > 10]
+subset_dds
+```
+
+### How many genes are retained? 
+i.e. how many passed the filtering step?
+
+**Answer Here**:
+
+Set a factor level:
+#### Important, DESeq2 will need a reference (think about it as the baseline, wildtype, untreated, control, etc...)
+It will normally take the first one alfabetical, but to make sure you can use the relevel function! Look at this example, edit
+according to what you are working with
+```{r}
+#relevel(data$drug, ref = 'control')
+relevel(dds$dexamethasone, ref = 'control')
+```
+
+Now actually run DESEQ
+
+```{r}
+dds <- DESeq(subset_dds)
+```
+
+Look at the output as it runs! This is actually running on your computer, so depending on what you have it might take 10 seconds or a couple of minutes
+
+### Let's Start looking at the data:
+run counts() again on the object created from the main DESEq function, create two code chunks, run the counts() method twice but add normalzied=T to one of them, look at the diffrences, which ones are scaled up? which ones are scaled down?
+```{r}
+### counts()
+### counts()
+```
+
+We are now ready to look at our results! We apply the results function, print the help of the results function and select an alpha of 0.05
+```{r}
+res <- results(dds, alpha = 0.05)
+res
+```
+### And that's it! you have a set of genes and how differentially expressed these genes are!
+Use the summary() function to look at your data 
+```{r}
+summary(res)
+
+```
+
+How many genes are upregulaed?? How many are downregulated??
+
+Use the order() fucntion to sor the res object by adjusted p values
+
+# Intro to Viz:
+
+M stands for "minus" or "log ratio": On the horizontal axis (x-axis), you'll see the expression levels of genes in one condition (like healthy cells), subtracted from the expression levels in another condition (like diseased cells). This gives you a measure of how much the gene expression changes between the two conditions.
+
+A stands for "average" or "average abundance": On the vertical axis (y-axis), you'll see the average expression levels of genes from both conditions. This helps to see if there's any bias or systematic difference between the two conditions.
+
+```{r}
+plotMA(dds)
+```
+
+### This is it guys! Save your notebook and submit it for credit for today's activity! Monday we will be looking at more complex visuzaliations with DESeq outputs!
+
+```{r}
+BiocManager::install("gprofiler")
+BiocManager::install("EnhancedVolcano")
+```
+
+```{r}
+library(EnhancedVolcano)
+sigs.df = as.data.frame(res)
+EnhancedVolcano(sigs.df,x = 'log2FoldChange', y = 'padj',  lab= rownames(sigs.df))
+```
+```{r}
+## from manual 
+ EnhancedVolcano(res,
+    lab = rownames(res),
+    x = 'log2FoldChange',
+    y = 'pvalue',
+    title = 'N061011 versus N61311',
+    pCutoff = 10e-32,
+    FCcutoff = 0.5,
+    pointSize = 3.0,
+    labSize = 6.0)
+```
+
