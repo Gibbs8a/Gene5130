@@ -1,0 +1,145 @@
+---
+title: "Final Bioinformatic Project"
+author: "Ochoa"
+date: "2024-04-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+     knitr::opts_knit$set(root.dir = normalizePath("~/Bioinformatics")) 
+```
+
+```{r Prepping Libraries }
+#BiocManager::install("org.Mm.eg.db") 
+library(dplyr)
+library(readr)
+library(DESeq2)
+library(ggplot2)
+library(EnhancedVolcano)
+library("org.Mm.eg.db")
+library(ComplexHeatmap)
+library(clusterProfiler)
+library(gprofiler2) 
+```
+#### Original Data in a BASH, but utilizing JN counts table and metadata 
+```{r counts table}
+PRcounts = read.table('JNcounts.txt', row.names = 1, header = TRUE)
+PRmetadata = read.csv('JNmetadata.csv', row.names = 1, header = TRUE)
+```
+```{r adjusting data frame, saved under updated name }
+PRcounts = PRcounts %>%
+  select(-Chr, -Start, -End, -Strand, -Length) 
+```
+
+```{r DESEQ Dataframe }
+dds = DESeqDataSetFromMatrix(countData = PRcounts, 
+                              colData = PRmetadata,
+                              design = ~ Age)
+## Subset deseq object
+subset =  dds[(rowSums(counts(dds)) >= 10),]
+
+### Base is for preferred treatment, setting Young age as 'ref/control'
+relevel(dds$Age, ref='Young')
+
+### Run deseq2
+DeSeqProd = DESeq(subset)
+#### Save the results to a new object
+StatusRes = results(DeSeqProd, alpha = 0.05)
+```
+```{r Initial Visualization }
+StatusRes
+```
+
+```{r Gene Symbol now with Gene Names }
+SigDF = as.data.frame(StatusRes)
+SigDF$symbol = mapIds(org.Mm.eg.db, keys= rownames(SigDF), keytype = 'ENSEMBL', colum = "SYMBOL")
+```
+#### For the following section, I needed to use a really high cut off value because there were no genes that made the adjusted p value for the observations we have. I did this so that we could see the value of the heat map, and I will attempt the GO Enrichment to see what happens 
+```{r Heat Map}
+Diff_df = as.data.frame(SigDF)
+Diff_df = Diff_df %>%
+  filter(padj < 0.5)
+#, #log2FoldChange > 3.5, #baseMean > 100)
+
+pmat = counts(DeSeqProd, normalized = T)[rownames(Diff_df),]
+colnames(pmat) = c('MidAge PBS', 'MidAge SARS-CoV-02', 'Young PBS', 'Young SARS-CoV-02')
+pmat.z = t(apply(pmat,1, scale))
+colnames (pmat.z) = colnames(pmat)
+Heatmap(pmat.z, cluster_rows= T, cluster_columns= T, name = "Z-score", row_labels = Diff_df[rownames(pmat.z),]$symbol, column_names_gp = gpar(fontsize = 10), row_names_gp = gpar(fontsize = 5), row_names_rot = 45, column_names_rot = 25)
+```
+####So Go Enrichment did not work... I suppose I can try again with sickness instead.
+```{r}
+Diff_df = as.data.frame(SigDF)
+Diff_df = Diff_df %>%
+  filter(padj < 0.05)
+
+proj_tested_genes = rownames(Diff_df)
+GO_proj_results = enrichGO(gene = proj_tested_genes, OrgDb = "org.Mm.eg.db", keyType = 'ENSEMBL', ont = "BP")
+fit = plot(barplot(GO_proj_results, showCategory=12, font.size = 8))
+```
+
+```{r DeSeq Round 2}
+dds = DESeqDataSetFromMatrix(countData = PRcounts, 
+                              colData = PRmetadata,
+                              design = ~ Status)
+
+subset =  dds[(rowSums(counts(dds)) >= 10),]
+
+relevel(dds$Status, ref='Control')
+
+DeSeqProd = DESeq(subset)
+
+StatusRes = results(DeSeqProd, alpha = 0.05)
+
+StatusRes
+
+SigDF = as.data.frame(StatusRes)
+SigDF$symbol = mapIds(org.Mm.eg.db, keys= rownames(SigDF), keytype = 'ENSEMBL', colum = "SYMBOL")
+```
+
+```{r Reattempting Heat Map }
+Diff_df = as.data.frame(SigDF)
+Diff_df = Diff_df %>%
+  filter(padj < 0.05, log2FoldChange > 3.5, baseMean > 100)
+
+pmat = counts(DeSeqProd, normalized = T)[rownames(Diff_df),]
+colnames(pmat) = c('MidAge PBS', 'MidAge SARS-CoV-02', 'Young PBS', 'Young SARS-CoV-02')
+pmat.z = t(apply(pmat,1, scale))
+colnames (pmat.z) = colnames(pmat)
+Heatmap(pmat.z, cluster_rows= T, cluster_columns= T, name = "Z-score", row_labels = Diff_df[rownames(pmat.z),]$symbol, column_names_gp = gpar(fontsize = 8), row_names_gp = gpar(fontsize = 8), row_names_rot = 45, column_names_rot = 45)
+```
+
+```{r GO ENRICHMENT}
+Diff_df = as.data.frame(SigDF)
+Diff_df = Diff_df %>%
+  filter(padj < 0.05)
+
+proj_tested_genes = rownames(Diff_df)
+GO_proj_results = enrichGO(gene = proj_tested_genes, OrgDb = "org.Mm.eg.db", keyType = 'ENSEMBL', ont = "BP")
+fit = plot(barplot(GO_proj_results, showCategory=10, font.size = 8))
+```
+
+```{r Plot GSEA}
+go_projupreg <- gost(proj_tested_genes, organism = 'mmusculus', significant = T)
+
+res2 <- projstatus_res[order(-projstatus_res$stat),]
+proj_gene_list <- res2$stat
+names(proj_gene_list) <- rownames(res2)
+gsea_plots <- gseGO(proj_gene_list, ont = "BP", keyType = "ENSEMBL", OrgDb ="org.Mm.eg.db", eps = 1e-100 )
+gseaplot(gsea_plots, geneSetID = "GO:0046324" )
+
+##changed boundary for calculating p value 
+```
+
+```{r}
+EnhancedVolcano(SigDF, x='log2FoldChange', 
+                y= 'padj', 
+                lab = SigDF$symbol,
+                title = 'Fold Change and Significance of Expressed Genes',
+                pCutoff = 10e-5,
+                FCcutoff = 2,
+                pointSize = 1.0,
+                labSize = 2.0,
+                colAlpha = 1)
+```
+
